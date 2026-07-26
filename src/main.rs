@@ -143,7 +143,7 @@ fn main() {
     Crust::init();
     Crust::set_app_identity("Particles");
     let (mut cols, mut rows) = Crust::terminal_size();
-    let mut detail = Pane::new(1, DETAIL_Y, cols, rows.saturating_sub(DETAIL_Y).max(1), 253, 0);
+    let mut detail = Pane::new(2, DETAIL_Y, cols.saturating_sub(2), rows.saturating_sub(DETAIL_Y).max(1), 253, 0);
     let mut status = Pane::new(1, rows, cols, 1, 250, 236);
     status.scroll = false;
 
@@ -530,9 +530,15 @@ fn fit_panes(app: &App, detail: &mut Pane, cols: u16, rows: u16) {
         View::Table => DETAIL_Y,
         View::Zoom => GRID_Y + zoom_h(rows) + 3,
     };
-    detail.x = 1;
+    // One blank column on the left; the article should not start hard
+    // against the terminal's edge.
+    detail.x = 2;
     detail.y = top;
-    detail.w = if app.view == View::Table && cols >= SIDE_MIN { SIDE_X - 2 } else { cols };
+    detail.w = if app.view == View::Table && cols >= SIDE_MIN {
+        SIDE_X - 3
+    } else {
+        cols.saturating_sub(2)
+    };
     detail.h = rows.saturating_sub(top).max(1);
 }
 

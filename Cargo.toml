@@ -1,6 +1,6 @@
 [package]
 name = "particles"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["Geir Isene <g@isene.com>"]
 description = "Standard Model explorer: the fundamental particles, and a zoom from an atom down through nucleus and nucleon to the quarks. Part of the Fe2O3 suite, built on crust."
