@@ -197,17 +197,17 @@ fn main() {
                 }
             }
             // ── table view: walk the chart ──────────────────────────
-            "LEFT" | "h" => step(&mut app, (-1, 0), &mut detail, cols),
-            "RIGHT" | "l" => step(&mut app, (1, 0), &mut detail, cols),
-            "UP" | "k" => step(&mut app, (0, -1), &mut detail, cols),
-            "DOWN" | "j" => step(&mut app, (0, 1), &mut detail, cols),
+            "LEFT" | "h" => step(&mut app, (-1, 0), &mut detail, cols, rows),
+            "RIGHT" | "l" => step(&mut app, (1, 0), &mut detail, cols, rows),
+            "UP" | "k" => step(&mut app, (0, -1), &mut detail, cols, rows),
+            "DOWN" | "j" => step(&mut app, (0, 1), &mut detail, cols, rows),
             "<" | "p" => {
                 let t = app.sel.saturating_sub(1);
-                select(&mut app, t, &mut detail, cols);
+                select(&mut app, t, &mut detail, cols, rows);
             }
             ">" | "n" => {
                 let t = (app.sel + 1).min(PARTICLES.len() - 1);
-                select(&mut app, t, &mut detail, cols);
+                select(&mut app, t, &mut detail, cols, rows);
             }
             "J" | "S-DOWN" => detail.linedown(),
             "K" | "S-UP" => detail.lineup(),
@@ -222,7 +222,7 @@ fn main() {
                 match q.as_deref().map(data::find) {
                     Some(Some(i)) => {
                         app.view = View::Table;
-                        select(&mut app, i, &mut detail, cols);
+                        select(&mut app, i, &mut detail, cols, rows);
                         draw_all(&app, &mut detail, &mut status, cols, rows);
                     }
                     Some(None) => status.say(&style::rgb("no match", Some(ERR_RGB), None, "")),
@@ -305,7 +305,7 @@ fn main() {
 
 // ─────────────────────────── selection ───────────────────────────────
 
-fn step(app: &mut App, dir: (i32, i32), detail: &mut Pane, cols: u16) {
+fn step(app: &mut App, dir: (i32, i32), detail: &mut Pane, cols: u16, rows: u16) {
     let (cx, cy) = PARTICLES[app.sel].pos;
     let (mut x, mut y) = (cx as i32, cy as i32);
     for _ in 0..8 {
@@ -315,13 +315,13 @@ fn step(app: &mut App, dir: (i32, i32), detail: &mut Pane, cols: u16) {
             return;
         }
         if let Some(i) = PARTICLES.iter().position(|p| p.pos == (x as u16, y as u16)) {
-            select(app, i, detail, cols);
+            select(app, i, detail, cols, rows);
             return;
         }
     }
 }
 
-fn select(app: &mut App, new: usize, detail: &mut Pane, cols: u16) {
+fn select(app: &mut App, new: usize, detail: &mut Pane, cols: u16, rows: u16) {
     if new == app.sel && app.pane == Pane2::Article {
         return;
     }
@@ -332,7 +332,7 @@ fn select(app: &mut App, new: usize, detail: &mut Pane, cols: u16) {
     app.pane = Pane2::Article;
     draw_header(app, cols);
     draw_table(app, cols);
-    draw_side(app, cols);
+    draw_side(app, cols, rows);
     set_detail(app, detail, cols);
 }
 
@@ -467,12 +467,13 @@ fn draw_zoom(app: &App, cols: u16, rows: u16) {
     let mut cv = Canvas::new(w, h);
     // A braille sub-pixel is half a cell wide and a quarter tall, and a
     // cell is about twice as tall as it is wide — so sub-pixels are
-    // square and the scale is simply the smaller half-dimension.
+    // square, and the scale is whichever axis runs out of room first.
+    let (sx, sy) = level.span();
     let view = View3 {
         yaw: app.yaw,
         pitch: app.pitch,
         eye: 5.0,
-        scale: ((w * 2).min(h * 4) as f64 / 2.0) * 0.92,
+        scale: (((w * 2) as f64 / (2.0 * sx)).min((h * 4) as f64 / (2.0 * sy))) * 0.92,
     };
     let (pts, lines) = models::scene(level);
     view.draw(&mut cv, &pts);
@@ -521,14 +522,17 @@ fn help_line(app: &App) -> String {
     }
 }
 
-/// The article pane starts below whichever view is showing.
+/// The article pane starts below whichever view is showing. In the table
+/// view it also yields the right-hand column to the particle card, which
+/// then runs the full height of the screen.
 fn fit_panes(app: &App, detail: &mut Pane, cols: u16, rows: u16) {
     let top = match app.view {
         View::Table => DETAIL_Y,
         View::Zoom => GRID_Y + zoom_h(rows) + 3,
     };
+    detail.x = 1;
     detail.y = top;
-    detail.w = cols;
+    detail.w = if app.view == View::Table && cols >= SIDE_MIN { SIDE_X - 2 } else { cols };
     detail.h = rows.saturating_sub(top).max(1);
 }
 
@@ -539,7 +543,7 @@ fn draw_all(app: &App, detail: &mut Pane, status: &mut Pane, cols: u16, rows: u1
     match app.view {
         View::Table => {
             draw_table(app, cols);
-            draw_side(app, cols);
+            draw_side(app, cols, rows);
         }
         View::Zoom => draw_zoom(app, cols, rows),
     }
@@ -582,13 +586,13 @@ fn fit(v: &str, w: usize) -> String {
     }
 }
 
-fn draw_side(app: &App, cols: u16) {
+fn draw_side(app: &App, cols: u16, term_rows: u16) {
     if cols < SIDE_MIN || app.view != View::Table {
         return;
     }
     let avail = (cols - SIDE_X + 1) as usize;
     let p = &PARTICLES[app.sel];
-    let cell = avail.saturating_sub(2).min(56);
+    let cell = avail.saturating_sub(2).min(64);
     let mut lines = vec![
         format!(
             "{}  {}",
@@ -604,24 +608,29 @@ fn draw_side(app: &App, cols: u16) {
     let bar = style::dim("│");
     let rule = "─".repeat(cell);
     lines.push(style::dim(&format!("┌{rule}┐")));
+    let vw = cell.saturating_sub(LBL_W + GUTTER + 2).max(8);
     for (k, v) in prop_rows(p) {
-        lines.push(format!(
-            "{bar} {}{}{} {bar}",
-            style::dim(&format!("{k:<LBL_W$}")),
-            " ".repeat(GUTTER),
-            fit(&v, cell.saturating_sub(LBL_W + GUTTER + 2))
-        ));
+        // Long values wrap onto a second line rather than being cut off.
+        for (i, part) in wrap(&v, vw).into_iter().enumerate() {
+            let label = if i == 0 { k.clone() } else { String::new() };
+            lines.push(format!(
+                "{bar} {}{}{} {bar}",
+                style::dim(&format!("{label:<LBL_W$}")),
+                " ".repeat(GUTTER),
+                fit(&part, vw)
+            ));
+        }
     }
     lines.push(style::dim(&format!("└{rule}┘")));
 
     let blank = " ".repeat(avail);
     let mut s = String::new();
-    let rows = DETAIL_Y - GRID_Y + 1;
-    for r in 0..rows {
+    let room = term_rows.saturating_sub(GRID_Y);
+    for r in 0..room {
         s.push_str(&move_to(GRID_Y - 1 + r, SIDE_X));
         s.push_str(&blank);
     }
-    for (i, l) in lines.iter().take(rows as usize).enumerate() {
+    for (i, l) in lines.iter().take(room as usize).enumerate() {
         s.push_str(&move_to(GRID_Y - 1 + i as u16, SIDE_X));
         s.push_str(&crust::truncate_ansi(l, avail));
     }

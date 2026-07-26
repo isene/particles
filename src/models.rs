@@ -12,7 +12,6 @@ pub const GLUON_RGB: (u8, u8, u8) = (255, 200, 90);
 pub const QUARK_R: (u8, u8, u8) = (255, 90, 90);
 pub const QUARK_G: (u8, u8, u8) = (110, 230, 130);
 pub const QUARK_B: (u8, u8, u8) = (110, 160, 255);
-pub const FIELD_RGB: (u8, u8, u8) = (110, 110, 125);
 pub const ANTIQUARK_RGB: (u8, u8, u8) = (230, 120, 255);
 
 #[derive(Clone, Copy, PartialEq)]
@@ -41,6 +40,17 @@ impl Level {
             Level::Nucleus => "≈ 5 × 10⁻¹⁵ m across",
             Level::Nucleon => "≈ 1.7 × 10⁻¹⁵ m across",
             Level::Quark => "< 10⁻¹⁸ m — a point, as far as anyone can measure",
+        }
+    }
+    /// Half-extent of the scene, across and up. Spherical scenes are the
+    /// same both ways; the quark scene is a long thin string, and would
+    /// be drawn tiny if it had to fit the frame's height as a square.
+    pub fn span(&self) -> (f64, f64) {
+        match self {
+            Level::Atom => (1.15, 1.15),
+            Level::Nucleus => (0.92, 0.92),
+            Level::Nucleon => (1.0, 1.0),
+            Level::Quark => (1.55, 0.45),
         }
     }
     /// What the picture is trying to teach.
@@ -182,17 +192,9 @@ pub fn quark() -> (Vec<P3>, Vec<(P3, P3, (u8, u8, u8))>) {
             pts.push(P3::new(x, rad * ang.cos(), rad * ang.sin(), GLUON_RGB, 0));
         }
     }
-    // The gap where it broke, marked by the field collapsing inward.
-    let mut lines = Vec::new();
-    for i in 0..8u64 {
-        let th = i as f64 / 8.0 * std::f64::consts::TAU;
-        lines.push((
-            P3::new(-0.14, 0.20 * th.cos(), 0.20 * th.sin(), FIELD_RGB, 0),
-            P3::new(0.14, 0.20 * th.cos(), 0.20 * th.sin(), FIELD_RGB, 0),
-            FIELD_RGB,
-        ));
-    }
-    (pts, lines)
+    // Nothing spans the gap: that is the whole point. The string is gone,
+    // and what is left is two colour-neutral pairs flying apart.
+    (pts, Vec::new())
 }
 
 pub fn scene(level: Level) -> (Vec<P3>, Vec<(P3, P3, (u8, u8, u8))>) {

@@ -8,6 +8,8 @@
 
 Two views. The chart lays out the seventeen fundamental particles the way every physics poster does, three generations across, with each one's mass, charge, spin, color charge and full Wikipedia article a keypress away. The zoom takes a carbon atom apart: nucleus, then one nucleon, then a single quark and the gluon string that will not let it go. Rotate the model with the arrow keys. Built on [Crust](https://github.com/isene/crust), part of the [Fe2O3 suite](https://github.com/isene/fe2o3).
 
+![The Standard Model chart](img/screenshot-chart.png)
+
 ## Features
 
 - **The Standard Model chart**: quarks and leptons in three generations, the four gauge bosons, the Higgs, plus the proton and neutron they build
@@ -18,6 +20,16 @@ Two views. The chart lays out the seventeen fundamental particles the way every 
 - **Ask Claude** (`c`) about the particle or the zoom level you are looking at
 - **Zero idle cost**: event-driven, no timers, no animation loop
 - **Offline**: one fetch, then everything is local
+
+### The zoom
+
+Press `Tab`, then `+` to descend. A proton: three valence quarks, red, green and blue, joined by gluon flux tubes, in a dim sea of virtual pairs.
+
+![A proton](img/screenshot-proton.png)
+
+One level further down, pull two quarks apart. The string between them stores energy until it snaps into a new quark-antiquark pair, and you are left holding two mesons instead of one free quark.
+
+![Confinement](img/screenshot-confinement.png)
 
 ## Install
 
