@@ -59,6 +59,9 @@ struct App {
     pitch: f64,
     cache: data::Cache,
     chat: Vec<(String, String)>,
+    /// The image display, made on the first zoom view; the model is real
+    /// pixels where it is supported.
+    pixels: Option<glow::Display>,
 }
 
 fn main() {
@@ -138,6 +141,7 @@ fn main() {
         pitch: 0.35,
         cache,
         chat: Vec::new(),
+        pixels: None,
     };
 
     Crust::init();
@@ -147,7 +151,7 @@ fn main() {
     let mut status = Pane::new(1, rows, cols, 1, 250, 236);
     status.scroll = false;
 
-    draw_all(&app, &mut detail, &mut status, cols, rows);
+    draw_all(&mut app, &mut detail, &mut status, cols, rows);
 
     loop {
         let key = match Input::getchr(None) {
@@ -165,35 +169,35 @@ fn main() {
             }
             "TAB" => {
                 app.view = if app.view == View::Table { View::Zoom } else { View::Table };
-                draw_all(&app, &mut detail, &mut status, cols, rows);
+                draw_all(&mut app, &mut detail, &mut status, cols, rows);
             }
             // ── zoom view: rotate and descend ───────────────────────
             "LEFT" | "h" if app.view == View::Zoom => {
                 app.yaw -= 0.22;
-                draw_zoom(&app, cols, rows);
+                draw_zoom(&mut app, cols, rows);
             }
             "RIGHT" | "l" if app.view == View::Zoom => {
                 app.yaw += 0.22;
-                draw_zoom(&app, cols, rows);
+                draw_zoom(&mut app, cols, rows);
             }
             "UP" | "k" if app.view == View::Zoom => {
                 app.pitch = (app.pitch + 0.18).clamp(-1.4, 1.4);
-                draw_zoom(&app, cols, rows);
+                draw_zoom(&mut app, cols, rows);
             }
             "DOWN" | "j" if app.view == View::Zoom => {
                 app.pitch = (app.pitch - 0.18).clamp(-1.4, 1.4);
-                draw_zoom(&app, cols, rows);
+                draw_zoom(&mut app, cols, rows);
             }
             "+" | "=" if app.view == View::Zoom => {
                 if app.level + 1 < LEVELS.len() {
                     app.level += 1;
-                    draw_all(&app, &mut detail, &mut status, cols, rows);
+                    draw_all(&mut app, &mut detail, &mut status, cols, rows);
                 }
             }
             "-" | "_" if app.view == View::Zoom => {
                 if app.level > 0 {
                     app.level -= 1;
-                    draw_all(&app, &mut detail, &mut status, cols, rows);
+                    draw_all(&mut app, &mut detail, &mut status, cols, rows);
                 }
             }
             // ── table view: walk the chart ──────────────────────────
@@ -223,7 +227,7 @@ fn main() {
                     Some(Some(i)) => {
                         app.view = View::Table;
                         select(&mut app, i, &mut detail, cols, rows);
-                        draw_all(&app, &mut detail, &mut status, cols, rows);
+                        draw_all(&mut app, &mut detail, &mut status, cols, rows);
                     }
                     Some(None) => status.say(&style::rgb("no match", Some(ERR_RGB), None, "")),
                     None => status.say(&help_line(&app)),
@@ -273,6 +277,7 @@ fn main() {
                 set_detail(&app, &mut detail, cols);
             }
             "u" => {
+                if let Some(d) = app.pixels.as_mut() { d.clear_all(); }
                 Crust::cleanup();
                 println!("particles: re-fetching articles …");
                 let msg = match fetch::fetch_all() {
@@ -285,7 +290,7 @@ fn main() {
                 };
                 Crust::init();
                 Crust::set_app_identity("Particles");
-                draw_all(&app, &mut detail, &mut status, cols, rows);
+                draw_all(&mut app, &mut detail, &mut status, cols, rows);
                 status.say(&msg);
             }
             "RESIZE" => {
@@ -294,12 +299,13 @@ fn main() {
                 rows = r;
                 status.y = rows;
                 status.w = cols;
-                draw_all(&app, &mut detail, &mut status, cols, rows);
+                draw_all(&mut app, &mut detail, &mut status, cols, rows);
             }
             _ => {}
         }
     }
 
+    if let Some(d) = app.pixels.as_mut() { d.clear_all(); }
     Crust::cleanup();
 }
 
@@ -456,24 +462,27 @@ fn zoom_h(rows: u16) -> u16 {
     rows.saturating_sub(GRID_Y + ZOOM_BOTTOM).max(6)
 }
 
-/// The zoom view: one scene, rotated by the arrow keys.
-fn draw_zoom(app: &App, cols: u16, rows: u16) {
+/// The zoom view: one scene, rotated by the arrow keys. Real pixels
+/// through glow where the terminal shows images, braille elsewhere.
+fn draw_zoom(app: &mut App, cols: u16, rows: u16) {
     if app.view != View::Zoom {
         return;
     }
     let level = LEVELS[app.level];
     let w = cols.saturating_sub(4).max(20) as usize;
     let h = zoom_h(rows) as usize;
-    let mut cv = Canvas::new(w, h);
-    // A braille sub-pixel is half a cell wide and a quarter tall, and a
-    // cell is about twice as tall as it is wide — so sub-pixels are
-    // square, and the scale is whichever axis runs out of room first.
+    let pixels = app.pixels.get_or_insert_with(glow::Display::new).supported();
+    let cell = glow::get_cell_size();
+    let mut cv = if pixels { Canvas::pixels(w, h, cell) } else { Canvas::new(w, h) };
+    // The scale is whichever axis runs out of room first. A braille
+    // sub-pixel is half a cell wide and a quarter tall, and a cell is
+    // about twice as tall as it is wide, so those are square as well.
     let (sx, sy) = level.span();
     let view = View3 {
         yaw: app.yaw,
         pitch: app.pitch,
         eye: 5.0,
-        scale: (((w * 2) as f64 / (2.0 * sx)).min((h * 4) as f64 / (2.0 * sy))) * 0.92,
+        scale: ((cv.pw() as f64 / (2.0 * sx)).min(cv.ph() as f64 / (2.0 * sy))) * 0.92,
     };
     let (pts, lines) = models::scene(level);
     view.draw(&mut cv, &pts);
@@ -487,14 +496,17 @@ fn draw_zoom(app: &App, cols: u16, rows: u16) {
     for y in 0..h {
         s.push_str(&move_to(GRID_Y + y as u16, 3));
         let mut line = String::new();
-        for (ch, rgb) in cv.row(y) {
-            match rgb {
-                Some(c) if ch != ' ' => line.push_str(&style::rgb(&ch.to_string(), Some(c), None, "")),
-                _ => line.push(ch),
+        if !pixels {
+            for (ch, rgb) in cv.row(y) {
+                match rgb {
+                    Some(c) if ch != ' ' => line.push_str(&style::rgb(&ch.to_string(), Some(c), None, "")),
+                    _ => line.push(ch),
+                }
             }
         }
         s.push_str(&line);
-        s.push_str(&" ".repeat(cols.saturating_sub(3 + w as u16) as usize));
+        let drawn = if pixels { 0 } else { w as u16 };
+        s.push_str(&" ".repeat(cols.saturating_sub(3 + drawn) as usize));
     }
     // Caption: what this is, and how big.
     s.push_str(&move_to(GRID_Y + h as u16, 3));
@@ -508,6 +520,14 @@ fn draw_zoom(app: &App, cols: u16, rows: u16) {
         LEVELS.len()
     )));
     print!("{s}");
+    if pixels {
+        let mut out = glow::Canvas::with_cell(w as u16, h as u16, cell);
+        cv.paint(&mut out);
+        if let Some(d) = app.pixels.as_mut() {
+            d.clear_all();
+            d.show_canvas(&out, 3, GRID_Y);
+        }
+    }
     std::io::stdout().flush().ok();
 }
 
@@ -542,8 +562,10 @@ fn fit_panes(app: &App, detail: &mut Pane, cols: u16, rows: u16) {
     detail.h = rows.saturating_sub(top).max(1);
 }
 
-fn draw_all(app: &App, detail: &mut Pane, status: &mut Pane, cols: u16, rows: u16) {
+fn draw_all(app: &mut App, detail: &mut Pane, status: &mut Pane, cols: u16, rows: u16) {
     Crust::clear_screen();
+    // A picture placed earlier would sit over the new screen.
+    if let Some(d) = app.pixels.as_mut() { d.clear_all(); }
     fit_panes(app, detail, cols, rows);
     draw_header(app, cols);
     match app.view {

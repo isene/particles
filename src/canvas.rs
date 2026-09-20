@@ -5,7 +5,8 @@
 //! rotated, projected with a simple perspective divide, and painted into
 //! that grid. Color is per CELL (a braille glyph is one character, so it
 //! has one color), and the nearest point in a cell wins — which doubles
-//! as a crude depth cue.
+//! as a crude depth cue. Where the terminal shows images the same canvas
+//! is real pixels, one colour and depth per pixel, painted through glow.
 
 /// Braille dot bit for a sub-pixel position within a cell.
 /// Rows 0-2 use bits 0,1,2 / 3,4,5; row 3 uses bits 6,7.
@@ -19,43 +20,89 @@ const DOTS: [[u8; 2]; 4] = [
 pub struct Canvas {
     pub w: usize,
     pub h: usize,
+    /// Sub-pixels per cell across and down: 2 by 4 for braille, 1 by 1
+    /// when every cell is a real pixel.
+    sub: (usize, usize),
+    /// Pixels per braille sub-pixel, what a radius given in sub-pixels
+    /// is scaled by. 1 for braille.
+    dot: f64,
     bits: Vec<u8>,
     color: Vec<Option<(u8, u8, u8)>>,
     /// Depth of whatever set each cell's color, for nearest-wins.
-    depth: Vec<f64>,
+    depth: Vec<f32>,
 }
 
 impl Canvas {
+    /// A braille canvas of `cols` × `rows` cells.
     pub fn new(cols: usize, rows: usize) -> Self {
+        Self::make(cols, rows, (2, 4), 1.0)
+    }
+
+    /// A canvas of real pixels for `cols` × `rows` cells of `cell` pixels.
+    pub fn pixels(cols: usize, rows: usize, cell: (u16, u16)) -> Self {
+        let (cw, ch) = (cell.0.max(1) as usize, cell.1.max(1) as usize);
+        Self::make(cols * cw, rows * ch, (1, 1), (cw as f64 / 2.0 + ch as f64 / 4.0) / 2.0)
+    }
+
+    fn make(w: usize, h: usize, sub: (usize, usize), dot: f64) -> Self {
         Self {
-            w: cols,
-            h: rows,
-            bits: vec![0; cols * rows],
-            color: vec![None; cols * rows],
-            depth: vec![f64::INFINITY; cols * rows],
+            w,
+            h,
+            sub,
+            dot,
+            bits: vec![0; w * h],
+            color: vec![None; w * h],
+            depth: vec![f32::INFINITY; w * h],
         }
     }
 
-    /// Plot a sub-pixel. `x` in 0..w*2, `y` in 0..h*4.
+    /// The plotting grid, in sub-pixels.
+    pub fn pw(&self) -> usize {
+        self.w * self.sub.0
+    }
+    pub fn ph(&self) -> usize {
+        self.h * self.sub.1
+    }
+
+    /// A radius given in braille sub-pixels, in this canvas's own units.
+    /// A point of radius 0 stays one sub-pixel wide either way.
+    fn radius(&self, r: i32) -> i32 {
+        if self.sub == (1, 1) {
+            ((r.max(0) as f64).max(0.5) * self.dot).round() as i32
+        } else {
+            r.max(0)
+        }
+    }
+
+    /// Plot a sub-pixel. `x` in 0..pw, `y` in 0..ph.
     pub fn set(&mut self, x: i32, y: i32, rgb: (u8, u8, u8), z: f64) {
         if x < 0 || y < 0 {
             return;
         }
         let (px, py) = (x as usize, y as usize);
-        let (cx, cy) = (px / 2, py / 4);
+        let (cx, cy) = (px / self.sub.0, py / self.sub.1);
         if cx >= self.w || cy >= self.h {
             return;
         }
         let i = cy * self.w + cx;
-        self.bits[i] |= DOTS[py % 4][px % 2];
-        if z < self.depth[i] {
-            self.depth[i] = z;
+        self.bits[i] |= if self.sub == (1, 1) { 1 } else { DOTS[py % 4][px % 2] };
+        if (z as f32) < self.depth[i] {
+            self.depth[i] = z as f32;
             self.color[i] = Some(rgb);
         }
     }
 
-    /// Draw a filled disc of sub-pixels, for particles with size.
+    /// Draw a filled disc, `r` in braille sub-pixels, for particles with size.
     pub fn disc(&mut self, x: i32, y: i32, r: i32, rgb: (u8, u8, u8), z: f64) {
+        let r = self.radius(r);
+        self.fill(x, y, r, rgb, z);
+    }
+
+    /// A filled disc of radius `r` in this canvas's own units.
+    fn fill(&mut self, x: i32, y: i32, r: i32, rgb: (u8, u8, u8), z: f64) {
+        if r == 0 {
+            return self.set(x, y, rgb, z);
+        }
         for dy in -r..=r {
             for dx in -r..=r {
                 if dx * dx + dy * dy <= r * r {
@@ -71,8 +118,10 @@ impl Canvas {
         let (dx, dy) = ((x1 - x0).abs(), -(y1 - y0).abs());
         let (sx, sy) = (if x0 < x1 { 1 } else { -1 }, if y0 < y1 { 1 } else { -1 });
         let (mut x, mut y, mut err) = (x0, y0, dx + dy);
+        // As thick as a braille dot, whatever the canvas.
+        let thick = (self.dot / 2.0).floor() as i32;
         loop {
-            self.set(x, y, rgb, z);
+            self.fill(x, y, thick, rgb, z);
             if x == x1 && y == y1 {
                 break;
             }
@@ -88,7 +137,21 @@ impl Canvas {
         }
     }
 
-    /// One rendered row, as (cell glyph, color) pairs.
+    /// Copy a pixel canvas onto glow's canvas, cell for pixel.
+    pub fn paint(&self, out: &mut glow::Canvas) {
+        for y in 0..self.h.min(out.h) {
+            for x in 0..self.w.min(out.w) {
+                let i = y * self.w + x;
+                if self.bits[i] != 0 {
+                    if let Some(c) = self.color[i] {
+                        out.put(x, y, c);
+                    }
+                }
+            }
+        }
+    }
+
+    /// One rendered braille row, as (cell glyph, color) pairs.
     pub fn row(&self, y: usize) -> Vec<(char, Option<(u8, u8, u8)>)> {
         (0..self.w)
             .map(|x| {
@@ -142,8 +205,8 @@ impl View3 {
             return None; // behind the eye
         }
         let f = self.eye / denom;
-        let sx = (canvas.w * 2) as f64 / 2.0 + x1 * f * self.scale;
-        let syp = (canvas.h * 4) as f64 / 2.0 - y2 * f * self.scale;
+        let sx = canvas.pw() as f64 / 2.0 + x1 * f * self.scale;
+        let syp = canvas.ph() as f64 / 2.0 - y2 * f * self.scale;
         Some((sx.round() as i32, syp.round() as i32, z2))
     }
 
@@ -158,11 +221,7 @@ impl View3 {
         });
         for p in order {
             if let Some((x, y, z)) = self.project(p, canvas) {
-                if p.r <= 0 {
-                    canvas.set(x, y, p.rgb, z);
-                } else {
-                    canvas.disc(x, y, p.r, p.rgb, z);
-                }
+                canvas.disc(x, y, p.r, p.rgb, z);
             }
         }
     }
@@ -183,5 +242,26 @@ impl View3 {
             // cell to a background dot that happens to be a hair nearer.
             canvas.line(x0, y0, x1, y1, rgb, z0.min(z1) - 0.5);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pixel_canvas_scales_dots_and_paints_them() {
+        let mut cv = Canvas::pixels(4, 2, (10, 20));
+        assert_eq!((cv.pw(), cv.ph()), (40, 40));
+        cv.disc(20, 20, 0, (200, 100, 50), 1.0);
+        let mut out = glow::Canvas::with_cell(4, 2, (10, 20));
+        cv.paint(&mut out);
+        let lit = out.rgba.chunks(4).filter(|p| p[0] == 200).count();
+        assert!(lit > 1 && lit < 60, "a point is a small dot of {lit} pixels, not one");
+        assert_eq!(&out.rgba[(20 * 40 + 20) * 4..][..3], &[200, 100, 50]);
+        // Braille stays one sub-pixel per point of radius 0.
+        let mut br = Canvas::new(4, 2);
+        br.disc(3, 5, 0, (1, 1, 1), 1.0);
+        assert_eq!(br.row(1)[1].0, '\u{2810}');
     }
 }

@@ -14,7 +14,7 @@ Two views. The chart lays out the seventeen fundamental particles the way every 
 
 - **The Standard Model chart**: quarks and leptons in three generations, the four gauge bosons, the Higgs, plus the proton and neutron they build
 - **PDG numbers**: mass, charge, spin, color charge, which forces it feels, its antiparticle, and when it was found. The neutrino masses are the experimental upper limits, and say so
-- **Zoom into an atom** (`Tab`): four levels, atom → nucleus → nucleon → quark, each labelled with its real size, drawn as a rotatable 3D point cloud in braille
+- **Zoom into an atom** (`Tab`): four levels, atom → nucleus → nucleon → quark, each labelled with its real size, drawn as a rotatable 3D point cloud, real pixels in glass or any terminal that shows images, braille elsewhere
 - **Honest models**: carbon-12 keeps its 6 protons and 6 neutrons, the proton keeps its three valence quarks and its gluon flux tubes, and every level says out loud where the picture lies (the nucleus is drawn far too big; a quark has no size to draw)
 - **Full Wikipedia article** for every particle, cached locally
 - **Ask Claude** (`c`) about the particle or the zoom level you are looking at
