@@ -524,8 +524,7 @@ fn draw_zoom(app: &mut App, cols: u16, rows: u16) {
         let mut out = glow::Canvas::new(w as u16, h as u16);
         cv.paint(&mut out);
         if let Some(d) = app.pixels.as_mut() {
-            d.clear_all();
-            d.show_canvas(&out, 3, GRID_Y);
+            d.swap_canvas(&out, 3, GRID_Y);
         }
     }
     std::io::stdout().flush().ok();
