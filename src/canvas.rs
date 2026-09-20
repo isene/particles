@@ -38,10 +38,12 @@ impl Canvas {
         Self::make(cols, rows, (2, 4), 1.0)
     }
 
-    /// A canvas of real pixels for `cols` × `rows` cells of `cell` pixels.
-    pub fn pixels(cols: usize, rows: usize, cell: (u16, u16)) -> Self {
-        let (cw, ch) = (cell.0.max(1) as usize, cell.1.max(1) as usize);
-        Self::make(cols * cw, rows * ch, (1, 1), (cw as f64 / 2.0 + ch as f64 / 4.0) / 2.0)
+    /// A canvas of real pixels for `cols` × `rows` cells that cover
+    /// `size` pixels, as `glow::cell_box` gives it.
+    pub fn pixels(cols: usize, rows: usize, size: (usize, usize)) -> Self {
+        let (w, h) = (size.0.max(cols), size.1.max(rows));
+        let (cw, ch) = (w as f64 / cols.max(1) as f64, h as f64 / rows.max(1) as f64);
+        Self::make(w, h, (1, 1), (cw / 2.0 + ch / 4.0) / 2.0)
     }
 
     fn make(w: usize, h: usize, sub: (usize, usize), dot: f64) -> Self {
@@ -251,7 +253,7 @@ mod tests {
 
     #[test]
     fn a_pixel_canvas_scales_dots_and_paints_them() {
-        let mut cv = Canvas::pixels(4, 2, (10, 20));
+        let mut cv = Canvas::pixels(4, 2, (40, 40));
         assert_eq!((cv.pw(), cv.ph()), (40, 40));
         cv.disc(20, 20, 0, (200, 100, 50), 1.0);
         let mut out = glow::Canvas::with_cell(4, 2, (10, 20));

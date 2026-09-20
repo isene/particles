@@ -472,8 +472,8 @@ fn draw_zoom(app: &mut App, cols: u16, rows: u16) {
     let w = cols.saturating_sub(4).max(20) as usize;
     let h = zoom_h(rows) as usize;
     let pixels = app.pixels.get_or_insert_with(glow::Display::new).supported();
-    let cell = glow::get_cell_size();
-    let mut cv = if pixels { Canvas::pixels(w, h, cell) } else { Canvas::new(w, h) };
+    let size = glow::cell_box(w as u16, h as u16);
+    let mut cv = if pixels { Canvas::pixels(w, h, size) } else { Canvas::new(w, h) };
     // The scale is whichever axis runs out of room first. A braille
     // sub-pixel is half a cell wide and a quarter tall, and a cell is
     // about twice as tall as it is wide, so those are square as well.
@@ -521,7 +521,7 @@ fn draw_zoom(app: &mut App, cols: u16, rows: u16) {
     )));
     print!("{s}");
     if pixels {
-        let mut out = glow::Canvas::with_cell(w as u16, h as u16, cell);
+        let mut out = glow::Canvas::new(w as u16, h as u16);
         cv.paint(&mut out);
         if let Some(d) = app.pixels.as_mut() {
             d.clear_all();
