@@ -242,6 +242,19 @@ fn main() {
                         .spawn();
                 }
             }
+            // Ctrl+A, as in every Fe2O3 app: a full Claude session about
+            // what is on screen, with the talk so far.
+            "C-A" => {
+                if let Some(d) = app.pixels.as_mut() { d.clear_all(); }
+                let started = crust::claude_session("Particles", "I am in particles, my Standard Model app.", &claude_context(&app));
+                Crust::clear_screen();
+                detail.full_refresh();
+                status.full_refresh();
+                draw_all(&mut app, &mut detail, &mut status, cols, rows);
+                if !started {
+                    status.say(&style::rgb(" claude is not on the PATH", Some(ERR_RGB), None, ""));
+                }
+            }
             "c" => {
                 let prompt = if app.chat.is_empty() {
                     format!("Ask Claude about the {}: ", PARTICLES[app.sel].name)
@@ -810,6 +823,7 @@ fn help_text() -> String {
          \x20 g G                 top / bottom\n\
          \x20 /                   find a particle\n\
          \x20 c                   ask Claude about this particle\n\
+         \x20 Ctrl-A              a full Claude session about what is on screen\n\
          \x20 C                   toggle the Claude conversation\n\
          \x20 w                   open the Wikipedia page in a browser\n\
          \x20 u                   re-fetch the articles\n\
@@ -850,7 +864,9 @@ fn claude_run(prompt: &str, input: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-fn ask_claude(app: &App, question: &str) -> Result<String, String> {
+/// What the screen shows, for Claude, with the talk so far: the `c`
+/// questions and the Ctrl+A session both start from it.
+fn claude_context(app: &App) -> String {
     let p = &PARTICLES[app.sel];
     let mut ctx = format!(
         "Particle: {} ({}), a {}. Mass {}, charge {} e, spin {}, color charge {}.\n\
@@ -877,6 +893,12 @@ fn ask_claude(app: &App, question: &str) -> Result<String, String> {
             ctx.push_str(&format!("User: {q}\nYou: {a}\n\n"));
         }
     }
+    ctx
+}
+
+fn ask_claude(app: &App, question: &str) -> Result<String, String> {
+    let p = &PARTICLES[app.sel];
+    let mut ctx = claude_context(app);
     ctx.push_str(&format!("\n\nUser's question: {question}\n"));
     let prompt = format!(
         "You are a particle physics tutor answering inside a terminal Standard Model \

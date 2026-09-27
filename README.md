@@ -55,6 +55,7 @@ First start fetches the nineteen articles (a few seconds), then the app works of
 | g G | Top / bottom of the article |
 | / | Find a particle by symbol or name |
 | c | Ask Claude about this particle (follow-ups keep context) |
+| Ctrl-A | A full Claude session about what is on screen, as in every Fe₂O₃ app |
 | C | Toggle the Claude conversation view |
 | w | Open the Wikipedia page in the browser |
 | u | Re-fetch the articles |
