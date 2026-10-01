@@ -255,7 +255,7 @@ fn main() {
                     status.say(&style::rgb(" claude is not on the PATH", Some(ERR_RGB), None, ""));
                 }
             }
-            "c" => {
+            "c" if crust::CLAUDE => {
                 let prompt = if app.chat.is_empty() {
                     format!("Ask Claude about the {}: ", PARTICLES[app.sel].name)
                 } else {
@@ -281,7 +281,7 @@ fn main() {
                     _ => status.say(&help_line(&app)),
                 }
             }
-            "C" => {
+            "C" if crust::CLAUDE => {
                 app.pane = if app.pane == Pane2::Chat { Pane2::Article } else { Pane2::Chat };
                 set_detail(&app, &mut detail, cols);
             }
@@ -546,10 +546,10 @@ fn draw_zoom(app: &mut App, cols: u16, rows: u16) {
 fn help_line(app: &App) -> String {
     match app.view {
         View::Table => style::dim(
-            "←↓↑→ move · Tab zoom view · / find · c claude · w wiki · ? help · q quit",
+            &crust::key_help("←↓↑→ move · Tab zoom view · / find · c claude · w wiki · ? help · q quit"),
         ),
         View::Zoom => style::dim(
-            "arrows rotate · +/- zoom level · Tab table view · c claude · ? help · q quit",
+            &crust::key_help("arrows rotate · +/- zoom level · Tab table view · c claude · ? help · q quit"),
         ),
     }
 }
@@ -700,7 +700,7 @@ fn wrap(s: &str, w: usize) -> Vec<String> {
 fn set_detail(app: &App, detail: &mut Pane, cols: u16) {
     let side = cols >= SIDE_MIN && app.view == View::Table;
     let text = match app.pane {
-        Pane2::Help => help_text(),
+        Pane2::Help => crust::key_help(help_text()).into_owned(),
         Pane2::Chat => chat_text(app),
         Pane2::Article => match app.view {
             View::Zoom => zoom_text(app),
