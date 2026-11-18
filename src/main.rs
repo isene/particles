@@ -544,14 +544,15 @@ fn draw_zoom(app: &mut App, cols: u16, rows: u16) {
 }
 
 fn help_line(app: &App) -> String {
-    match app.view {
+    let keys = match app.view {
         View::Table => style::dim(
             &crust::key_help("←↓↑→ move · Tab zoom view · / find · c claude · w wiki · ? help · q quit"),
         ),
         View::Zoom => style::dim(
             &crust::key_help("arrows rotate · +/- zoom level · Tab table view · c claude · ? help · q quit"),
         ),
-    }
+    };
+    crust::with_version(&keys, Crust::terminal_size().0 as usize, "particles", env!("CARGO_PKG_VERSION"))
 }
 
 /// The article pane starts below whichever view is showing. In the table
